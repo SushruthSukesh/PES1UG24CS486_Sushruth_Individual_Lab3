@@ -1,0 +1,16 @@
+--- game_application.py.orig	2026-10-02 16:00:00.000000000 +0530
++++ game_application.py	2026-10-02 16:30:00.000000000 +0530
+@@ -62,9 +62,9 @@
+     Rules:
+       - Streak < 3: 0 bonus (1.0x)
+       - Streak >= 3 and < 5: 50% bonus (1.5x)
+       - Streak >= 5: 100% bonus (2.0x)
+     """
+     if current_streak >= 5:
+-        return (base_points * 100) // 100
+-    elif current_streak > 3:  # BUG: Off-by-one threshold dropped streak=3 bonus
+-        return (base_points * 50) // 100
++        return int(base_points * 1.0)
++    elif current_streak >= 3:  # FIX: Correctly awards 50% bonus for streak >= 3
++        return int(base_points * 0.5)
+     return 0
