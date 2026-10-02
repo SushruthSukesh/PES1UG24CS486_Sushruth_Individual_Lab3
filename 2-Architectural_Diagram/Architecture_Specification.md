@@ -1,128 +1,179 @@
 # Architectural Specification & Design Document
 
-**System:** Book Club Reading Challenge & Discussion Portal  
-**Problem Statement #55** | **Domain:** Media, Events & Community  
-**Student:** Sushruth S | **SRN:** PES1UG24CS486  
+**Course:** Software Engineering Lab (UE24CS252AA) — Lab 3  
+**Title:** Component Modelling & Architectural Pattern Selection  
+**Assigned System:** Self-Service Coffee Kiosk System  
+**Student:** Sushruth S | **SRN:** PES1UG24CS486 | **Section:** 4-H  
 **Institution:** PES University, Department of Computer Science & Engineering  
 
 ---
 
-## 1. Architectural Style Selection & Justification
+## 1. Scenario Review & Requirements Analysis
 
-### 1.1 Selected Architectural Style: Layered Multi-Tier with Event-Driven Real-Time Extensions
+### 1.1 Assigned Scenario
+A Self-Service Coffee Kiosk system deployed in a busy café to provide an autonomous, rapid, and frictionless coffee ordering experience.
 
-The system employs a **4-Tier Layered Architecture** augmented with an **Event-Driven Pub/Sub messaging spine**:
-1. **Tier 1: Client & Presentation Tier** (React / Next.js Web Application, Progressive Web App, Discussion Lead Studio)
-2. **Tier 2: Edge Security & API Gateway Tier** (Nginx / Envoy Reverse Proxy, TLS 1.3 Termination, JWT RBAC Gatekeeper, WebSocket Push Gateway)
-3. **Tier 3: Core Application & Domain Services Tier** (Spoiler Masking Service, Reading Progress Engine, Discussion Moderation Service, Monthly Poll Engine, Gamification Service)
-4. **Tier 4: Persistence, Caching & Integration Tier** (PostgreSQL Relational DB, Redis In-Memory Cache, S3 Object Storage, External Book APIs)
+### 1.2 Core Functional Requirements
+- **FR-1 (Coffee Selection):** The system must allow customers to select from exactly three coffee types: **Espresso**, **Americano**, and **Latte**.
+- **FR-2 (Drink Size Customization):** The system must allow customers to select from two drink sizes: **Small** and **Large**, with dynamic price adjustment.
+- **FR-3 (Credit Card Payment):** The system must accept payments exclusively via **credit card** (no cash or NFC wallets permitted per kiosk spec).
+- **FR-4 (Receipt Generation):** The system must print a physical paper receipt with itemized order details (order ID, item, size, subtotal, tax, timestamp, card authorization code).
 
-### 1.2 Justification for Problem Statement #55
+### 1.3 Technical Constraints
+- **TC-1 (Touch Screen Interface):** Must handle responsive touch screen events with intuitive kiosk UI navigation.
+- **TC-2 (Hardware Printer Connectivity):** Must connect directly to physical receipt printer hardware via hardware drivers (ESC/POS serial/USB interface).
+- **TC-3 (Menu & Pricing Data Store):** Must store and retrieve menu catalog, size modifiers, pricing tables, and transaction logs.
 
-- **Strict Role Isolation (Club Member vs. Discussion Lead):** Tier 2 enforces cryptographic Role-Based Access Control (RBAC) at the edge, intercepting unauthorized moderation attempts before they reach the core domain (addressing **FR-003** and Jira Defect **BTBSC-3**).
-- **Sub-200ms Polling Latency under Peak Concurrency (NFR-001):** The combination of Tier 4 Redis in-memory caching and Tier 2 WebSockets allows real-time tally broadcasts to thousands of concurrent users without querying the primary relational database.
-- **ACID Integrity & Elimination of Duplicate Votes (FR-004, NFR-004):** The relational persistence layer enforces a composite unique constraint `UNIQUE(user_id, poll_id)` within atomic database transactions, preventing duplicate ballot submissions caused by rapid double-clicks or browser refreshes (remediating **BTBSC-4**).
-- **Safe Spoiler Rendering & Search Sanitization (FR-001):** The architecture decouples client-side DOM blur masking from server-side search indexing pipelines, ensuring that search preview snippets are pre-sanitized before public delivery (remediating **BTBSC-1**).
-- **Gamification Event Decoupling (FR-005):** Milestone badge awards execute asynchronously through internal event listeners, preventing reading progress updates from blocking on badge rendering.
+### 1.4 Non-Functional Requirements & Key Challenges
+- **Performance:** Instantaneous touch response (<50ms) and rapid end-to-end checkout to prevent queue accumulation during morning café rush hours.
+- **Usability:** High-contrast, intuitive touchscreen flow accessible to all customers without barista intervention.
+- **Security:** Strict PCI-DSS compliance; complete physical and logical isolation of credit card data buffers; no plaintext card data stored locally.
+- **Reliability:** Deterministic hardware error handling (e.g., out-of-paper detection, card terminal timeout) with graceful kiosk recovery.
 
 ---
 
-## 2. Component Model & Subsystem Responsibilities
+## 2. Architectural Style Analysis
 
-```mermaid
-graph TD
-    subgraph ClientLayer ["1. Client & Presentation Layer"]
-        UI_Member["Club Member Web & Mobile UI"]
-        UI_Lead["Discussion Lead Moderation Studio"]
-        UI_Poll["Live Voting & Tally Board"]
-        UI_Badge["Achievement Showcase"]
-    end
+| Architectural Style | Structure & Characteristics | Scenario Pros | Scenario Cons | Verdict |
+| :--- | :--- | :--- | :--- | :---: |
+| **Layered Architecture** | Organized into horizontal logical layers: Presentation, Business Logic, and Data Access. | • Clear separation of concerns<br/>• Hardware device abstraction<br/>• Zero network latency (in-process IPC)<br/>• Simple, robust local kiosk deployment | • Components are co-located on single host<br/>• Monolithic binary updates | **SELECTED (Optimal)** |
+| **Microservices Architecture** | Distributed collection of fine-grained, independently deployable network services. | • Independent service scaling<br/>• Technology heterogeneity | • Massive operational overhead for a single kiosk<br/>• High network latency & serialization overhead<br/>• Complex distributed failure modes | **REJECTED** |
+| **Client-Server Architecture** | Centralized backend server hosting logic/data with remote kiosk thin clients. | • Centralized catalog updates across multiple cafés | • Kiosk halts completely if café internet disconnects<br/>• Single point of network failure at checkout | **REJECTED** |
 
-    subgraph GatewayLayer ["2. API Gateway & Security Layer"]
-        GW_Proxy["TLS 1.3 Reverse Proxy & DDOS Filter"]
-        GW_Auth["JWT & RBAC Gatekeeper"]
-        GW_WS["WebSocket Gateway"]
-        GW_Rate["Rate Limiter (1,000 req/s)"]
-    end
+---
 
-    subgraph ServiceLayer ["3. Domain Microservices Layer"]
-        S_Spoiler["Spoiler Filter & Masking Service<br/>(BTBSC-1 Fix)"]
-        S_Progress["Reading Progress Engine<br/>(BTBSC-2 Fix)"]
-        S_Poll["Monthly Poll Voting Engine<br/>(BTBSC-4 Fix)"]
-        S_Mod["Moderation & RBAC Service<br/>(BTBSC-3 Fix)"]
-        S_Badge["Gamification & Badge Engine"]
-    end
+## 3. Architecture Selection & Justification
 
-    subgraph DataLayer ["4. Persistence, Caching & Integration Layer"]
-        DB_Postgres[("PostgreSQL DB<br/>ACID & Unique Indexes")]
-        DB_Redis[("Redis In-Memory Cache<br/>Pub/Sub & Tallies")]
-        EXT_Storage[("S3 Object Storage<br/>Covers & Avatars")]
-        EXT_Books["Open Library / Google Books API"]
-    end
+### Mandatory Architecture Selection Statement
+> **"We chose Layered Architecture for the Self-Service Coffee Kiosk System."**
 
-    UI_Member --> GW_Proxy
-    UI_Lead --> GW_Proxy
-    UI_Poll --> GW_WS
-    UI_Badge --> GW_Proxy
+### 3.1 Two Specific Scenario-Related Reasons
+1. **Hardware Modularity & Peripheral Isolation:** The kiosk couples directly to physical hardware peripherals (touchscreen monitor, EMV credit card reader, thermal receipt printer). Layered architecture encapsulates device drivers into discrete business/hardware components. If café management updates printer hardware or display resolutions, only the respective component driver is touched—core order logic and pricing schemas remain untouched.
+2. **Elimination of Distributed Overhead for an Autonomous Terminal:** A coffee kiosk is an embedded, single-station kiosk where orders are placed sequentially by physical customers. Microservices or remote client-server models introduce network failure points, serialization delays, and distributed transaction complexity. Layered architecture enables direct, sub-millisecond local in-process calls ensuring instantaneous checkout during peak café rushes.
 
-    GW_Proxy --> GW_Auth
-    GW_Auth --> S_Spoiler
-    GW_Auth --> S_Progress
-    GW_Auth --> S_Poll
-    GW_Auth --> S_Mod
+### 3.2 Security Advantage
+- **PCI-DSS Enclave & Layer Isolation:** All credit card interactions are encapsulated within the **Payment Service Component**. The Presentation Layer (touch screen) has zero direct access to memory structures holding cardholder data or the persistent database. Sensitive authorization runs through the isolated `Payment Interface` directly communicating with encrypted EMV terminal hardware, dramatically reducing PCI compliance audit scope and eliminating touch-screen memory snooping vulnerabilities.
 
-    GW_WS <--> DB_Redis
+### 3.3 Performance Benefit
+- **Zero Network Latency & Boot-Time In-Memory Caching:** All components communicate through local IPC or direct in-memory method invocations rather than network hops. Menu data (Espresso, Americano, Latte) and pricing matrices are loaded from the **Database Component** into local memory caches at startup, guaranteeing instantaneous touch responsiveness (<10ms) and immediate receipt dispatch.
 
-    S_Progress --> DB_Postgres
-    S_Progress -.->|Milestone Event| S_Badge
-    S_Badge --> DB_Postgres
-    S_Spoiler --> DB_Postgres
-    S_Mod --> DB_Postgres
-    S_Poll --> DB_Postgres
-    S_Poll --> DB_Redis
+---
 
-    S_Spoiler -.-> EXT_Books
+## 4. Component Identification & Interface Specifications
+
+### 4.1 Identified System Components (5 Components)
+
+1. **User Interface Component (`<<component>>`) — Presentation Layer**
+   - **Role:** Handles customer touch screen interactions, renders drink selection screens (Espresso, Americano, Latte), size toggles (Small, Large), payment status, and order completion screens.
+   - **Required Interface:** `Order Interface` (Socket)
+
+2. **Order Manager Component (`<<component>>`) — Business Layer**
+   - **Role:** Central domain orchestrator; maintains order state machine; computes total cost based on drink and size; triggers card payment; directs receipt printing; and persists completed order records.
+   - **Provided Interface:** `Order Interface` (Ball)
+   - **Required Interfaces:** `Payment Interface` (Socket), `Receipt Interface` (Socket), `Database Interface` (Socket)
+
+3. **Payment Service Component (`<<component>>`) — Business Layer**
+   - **Role:** Hardware bridge to the physical EMV card reader terminal; enforces Credit Card Only policy; manages point-to-point encryption (P2PE) and tokenized authorization requests.
+   - **Provided Interface:** `Payment Interface` (Ball)
+
+4. **Receipt Printer Component (`<<component>>`) — Business Layer (Hardware Abstraction)**
+   - **Role:** Communicates directly with the physical thermal receipt printer using ESC/POS protocol; formats itemized receipts (coffee type, size, price, order ID, timestamp); monitors printer paper and hardware status.
+   - **Provided Interface:** `Receipt Interface` (Ball)
+
+5. **Database Component (`<<component>>`) — Data Layer**
+   - **Role:** Local relational storage engine (SQLite / JDBC); stores menu items, drink sizes, base prices, tax rules, and transactional order histories.
+   - **Provided Interface:** `Database Interface` (Ball)
+
+---
+
+### 4.2 Interface Specifications (4 UML Ball & Socket Interfaces)
+
+```
++----------------------------------------------------------------------------------------------------+
+| 1. Order Interface                                                                                 |
+|    Provided by: Order Manager Component (Ball)                                                     |
+|    Required by: User Interface Component (Socket)                                                  |
+|    Protocol: Local IPC / Direct Method Invocation                                                  |
+|    Operations:                                                                                     |
+|      • selectCoffee(coffeeType: Enum[Espresso, Americano, Latte], size: Enum[Small, Large]): Order |
+|      • calculateTotal(orderId: String): Decimal                                                    |
+|      • submitOrder(orderId: String): TransactionStatus                                             |
+|      • cancelOrder(orderId: String): Boolean                                                       |
++----------------------------------------------------------------------------------------------------+
+| 2. Payment Interface                                                                               |
+|    Provided by: Payment Service Component (Ball)                                                   |
+|    Required by: Order Manager Component (Socket)                                                   |
+|    Protocol: Encrypted Hardware Terminal API / PCI SDK                                             |
+|    Operations:                                                                                     |
+|      • processPayment(orderId: String, amount: Decimal): PaymentResult                             |
+|      • authorizeCard(): CardAuthToken                                                              |
+|      • cancelTransaction(): Void                                                                   |
++----------------------------------------------------------------------------------------------------+
+| 3. Receipt Interface                                                                               |
+|    Provided by: Receipt Printer Component (Ball)                                                   |
+|    Required by: Order Manager Component (Socket)                                                   |
+|    Protocol: ESC/POS Thermal Printer Driver (USB / RS-232)                                         |
+|    Operations:                                                                                     |
+|      • printReceipt(orderDetails: ReceiptPayload): PrintStatus                                     |
+|      • checkPrinterStatus(): PrinterHealth[READY, OUT_OF_PAPER, JAMMED, OFFLINE]                   |
++----------------------------------------------------------------------------------------------------+
+| 4. Database Interface                                                                              |
+|    Provided by: Database Component (Ball)                                                          |
+|    Required by: Order Manager Component (Socket)                                                   |
+|    Protocol: Embedded SQL / JDBC Data Access Layer                                                 |
+|    Operations:                                                                                     |
+|      • getMenuCatalog(): List<CoffeeItem>                                                          |
+|      • getPricing(coffeeType: String, size: String): PricingRule                                    |
+|      • saveOrderRecord(record: CompletedOrder): Boolean                                            |
++----------------------------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 3. Core Subsystem Specifications
+## 5. UML Component Diagram Representation
 
-### 3.1 Spoiler Filter & Masking Subsystem
-- **Purpose:** Masks `[spoiler]` comments until unmasked by member or chapter completion; pre-sanitizes search index snippets.
-- **Interfaces:**
-  - `POST /api/comments` — Accepts comment payload, identifies spoiler tokens, tags entity.
-  - `GET /api/comments/{chapter_id}` — Returns comment payload with `is_spoiler=true` and CSS blur metadata.
-  - `GET /api/search?q={term}` — Returns sanitized search snippets with spoiler text replaced with `[Spoiler Content Hidden]`.
-- **Defect Resolution:** Fixes **BTBSC-1** by applying `sanitize_search_snippet()` filter during text tokenization.
+```mermaid
+graph TD
+    subgraph PresentationLayer ["Presentation Layer"]
+        UI["«component»<br/><b>User Interface Component</b><br/>Touch Screen Display & Navigation"]
+    end
 
-### 3.2 Reading Progress & Goal Subsystem
-- **Purpose:** Tracks personal daily/monthly reading targets; calculates completion percentage; updates reader streaks.
-- **Interfaces:**
-  - `POST /api/users/{id}/progress` — Submits `{book_id, pages_read, session_date}`.
-  - `GET /api/users/{id}/dashboard` — Computes active goal progress, streak count, and remaining pages.
-- **Validation Rules:** Validates that $0 < \text{pages\_read} \le \text{book.total\_pages} - \text{current\_page}$. Rejects negative values or zero (Fixes **BTBSC-2**).
+    subgraph BusinessLayer ["Business Layer"]
+        OM["«component»<br/><b>Order Manager Component</b><br/>Order Orchestration & Price Calculator"]
+        PAY["«component»<br/><b>Payment Service Component</b><br/>Credit Card Gateway & EMV Terminal Bridge"]
+        REC["«component»<br/><b>Receipt Printer Component</b><br/>ESC/POS Driver & Hardware Status Monitor"]
+    end
 
-### 3.3 Discussion Moderation Subsystem
-- **Purpose:** Provides Discussion Leads with tools to pin prompts, close discussions, and delete inappropriate content.
-- **Security Check:** Evaluates role claim in signed JWT (`role == 'DISCUSSION_LEAD'`). Non-leads receive `HTTP 403 Forbidden` (Fixes **BTBSC-3**).
-- **Audit Logging:** Emits structured JSON events to `moderation_audit_logs` table for compliance.
+    subgraph DataLayer ["Data Layer"]
+        DB["«component»<br/><b>Database Component</b><br/>Menu Catalog, Pricing & Order Persistence"]
+    end
 
-### 3.4 Democratic Monthly Poll Subsystem
-- **Purpose:** Conducts monthly book voting with duplicate vote prevention and sub-200ms real-time results.
-- **Persistence Guarantees:**
-  - Table `ballots`: Primary Key `(user_id, poll_id)`.
-  - Transaction: `BEGIN TRANSACTION; INSERT INTO ballots ...; INCREMENT redis_tally; COMMIT;`.
-  - If user attempts duplicate ballot submission, database raises unique constraint violation $\to$ API returns `HTTP 409 Conflict` (Fixes **BTBSC-4**).
+    UI -->|Required: Order Interface| IF_ORDER(( ))
+    IF_ORDER -->|Provided by| OM
+    
+    OM -->|Required: Payment Interface| IF_PAY(( ))
+    IF_PAY -->|Provided by| PAY
+    
+    OM -->|Required: Receipt Interface| IF_REC(( ))
+    IF_REC -->|Provided by| REC
+    
+    OM -->|Required: Database Interface| IF_DB(( ))
+    IF_DB -->|Provided by| DB
+
+    classDef comp fill:#ffffff,stroke:#1e293b,stroke-width:1.5px;
+    classDef iface fill:#0284c7,stroke:#0369a1,stroke-width:2px;
+    class UI,OM,PAY,REC,DB comp;
+    class IF_ORDER,IF_PAY,IF_REC,IF_DB iface;
+```
 
 ---
 
-## 4. Non-Functional Quality Attribute Realization
+## 6. End-to-End Data Flow
 
-| Quality Attribute | Architectural Tactic / Design Choice | Metric Verified |
-| :--- | :--- | :--- |
-| **Performance** | In-memory Redis caching for aggregate vote tallies; connection pooling with PgBouncer. | P95 latency &lt; 180 ms under 1,000 concurrent requests. |
-| **Security** | TLS 1.3 encryption on reverse proxy; Argon2id salted password hashing; AES-256 storage. | Zero plaintext credentials; Grade A+ SSL Labs rating. |
-| **Availability** | Stateless application containers orchestrated with automated health check restarts; 99.9% uptime. | Downtime &le; 43.8 minutes/month. |
-| **Integrity** | ACID database transactions with composite unique constraints `(user_id, poll_id)`. | 0 duplicate votes recorded during stress testing. |
-| **Usability** | Responsive multi-breakpoint CSS; WCAG 2.1 AA compliant semantic HTML and ARIA labels. | 100% Axe accessibility score; fluid UI from 375px to 1920px. |
+1. **Menu Fetch:** On boot, the `Order Manager` queries `Database Interface` to retrieve coffee types (`Espresso`, `Americano`, `Latte`) and size prices (`Small`, `Large`), caching them for fast rendering.
+2. **Customer Selection:** Customer touches the screen to select a coffee type and size. The `User Interface` invokes `selectCoffee()` on the `Order Interface`.
+3. **Calculation & Confirmation:** `Order Manager` computes total with tax and returns total to `User Interface` for customer confirmation.
+4. **Card Payment:** Customer taps/inserts card. `Order Manager` calls `processPayment()` across `Payment Interface`. The `Payment Service` interfaces with physical EMV card reader hardware, validates card, and returns `APPROVED`.
+5. **Receipt Printing:** Upon payment approval, `Order Manager` sends payload (order ID, items, amount, timestamp) across `Receipt Interface` to `Receipt Printer Component`, which executes physical ESC/POS printing.
+6. **Order Archival:** `Order Manager` calls `saveOrderRecord()` across `Database Interface` to persist the completed order in the local database.
+7. **Screen Reset:** UI displays order completion animation and resets to home screen for the next customer.

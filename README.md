@@ -43,11 +43,15 @@ PES1UG24CS486_Sushruth_Individual_Lab3/
 │   ├── RTM_Table.md                             # Bidirectional Requirements Traceability Matrix
 │   └── Requirements_Engineering_and_RTM.pdf     # Formatted printable master deliverable PDF
 │
-├── 2-Architectural_Diagram/                     # b) 2-Folder for Architectural Diagram
-│   ├── Architecture_Diagram.png                 # High-resolution 4-tier layered architecture diagram
+├── 2-Architectural_Diagram/                     # b) 2-Folder for Architectural Diagram (Lab 3 Handout)
+│   ├── Architecture_Diagram.png                 # UML Component Diagram (High-res 300 DPI PNG)
+│   ├── Architecture_Diagram.pdf                 # UML Component Diagram (Vector PDF export)
 │   ├── Architecture_Diagram.drawio              # Diagrams.net / Draw.io editable XML source
-│   ├── Architecture_Specification.md            # Component specification & architectural justification
-│   └── Architecture_Specification.pdf           # Printable formatted specification document
+│   ├── Architecture_Justification_Document.docx # Official 1-page Word document justification
+│   ├── Architecture_Justification_Document.pdf  # Printable 1-page PDF document justification
+│   ├── Architecture_Specification.md            # Detailed technical specification markdown
+│   ├── Architecture_Specification.pdf           # Full specification report PDF
+│   └── archive_bps55_book_club/                 # Preserved previous course project architecture files
 │
 ├── 3-Project_Creational_Screenshots/            # c) 3-Folder for GitHub & Jira Screenshots
 │   ├── README.md                                # Screenshot inventory and verification index
@@ -101,7 +105,7 @@ PES1UG24CS486_Sushruth_Individual_Lab3/
 | Folder | Teacher Deliverable Item | Description & Key Artifacts |
 | :--- | :--- | :--- |
 | [**`1-RE`**](./1-RE) | **a) Requirements Engineering** | 8 Functional Requirements (FR-001..008), 6 Non-Functional Requirements (NFR-001..006), and the complete bidirectional Requirements Traceability Matrix (RTM) linking requirements to Use Cases, Architecture components, WBS work packages, test cases, and Jira defects (`BTBSC-1` to `4`). |
-| [**`2-Architectural_Diagram`**](./2-Architectural_Diagram) | **b) Architectural Diagram** | 4-Tier Layered & Event-Driven Cloud Architecture (Presentation, Edge Gateway, Domain Microservices, Persistence/Redis Cache). Exported as high-res PNG, editable Draw.io XML, and detailed Architectural Specification. |
+| [**`2-Architectural_Diagram`**](./2-Architectural_Diagram) | **b) Architectural Diagram & Component Modelling (Lab 3 Handout)** | **Self-Service Coffee Kiosk System** Layered Architecture. Includes official **UML Component Diagram** (PNG, PDF, Draw.io XML), **1-Page Written Justification** (Word .docx & PDF), 5 components, and 4 ball-and-socket interfaces. |
 | [**`3-Project_Creational_Screenshots`**](./3-Project_Creational_Screenshots) | **c) GitHub & Jira Screenshots** | Evidence of repository creation on GitHub, commit workflows, and **13 high-resolution Jira screenshots** covering Kanban board, Scrum sprint simulation (29 story points), burndown chart, and Bug Tracker defect inspections. Includes the 3 official Lab 2 PDF reports. |
 | [**`4-SRS_and_Work_Breakdown_Steps`**](./4-SRS_and_Work_Breakdown_Steps) | **d) SRS & Work Breakdown Steps** | Complete Software Requirements Specification following **IEEE Std 830-1998**, paired with a **6-Phase Work Breakdown Structure (WBS)** detailing 21 discrete work packages, Fibonacci story point allocations, Mermaid Gantt timeline, and risk matrix. |
 | [**`5-Github_Copilot_Generated_Code`**](./5-Github_Copilot_Generated_Code) | **e) GitHub Copilot Generated Code** | Complete Python domain engine (`book_club_core_engine.py`) implementing reading goals, spoiler masking, moderation RBAC, and monthly poll deduplication. Accompanied by prompt journals, screenshots, and 100% passing self-test output. |
@@ -117,14 +121,43 @@ PES1UG24CS486_Sushruth_Individual_Lab3/
 - **Bidirectional Traceability Matrix (RTM):** 100% requirement coverage mapped across UML Use Cases (`UC-01` to `UC-09`), Architecture components, WBS items, PyTest cases, and Jira issues (`BTBSC-1` to `BTBSC-4`).
 - **Master PDF:** [`Requirements_Engineering_and_RTM.pdf`](./1-RE/Requirements_Engineering_and_RTM.pdf).
 
-### 2. Architectural Diagram (`2-Architectural_Diagram`)
-- **Architecture Pattern:** Multi-Tier Layered Architecture with Redis Pub/Sub Event-Driven Spine.
-- **Layers:**
-  1. *Presentation Layer:* Web, Mobile PWA, Moderation Console, Real-time Voting Tally Board.
-  2. *API Gateway Layer:* TLS 1.3 Reverse Proxy, JWT RBAC Gatekeeper, WebSocket Push Gateway.
-  3. *Domain Services Layer:* Spoiler Filter Service, Reading Progress Engine, Monthly Poll Engine, Moderation Service, Badge Award Engine.
-  4. *Persistence Layer:* PostgreSQL with ACID transactions and unique compound constraints; Redis sub-millisecond tally cache; Cloud Object Storage.
-- **Artifacts:** [`Architecture_Diagram.png`](./2-Architectural_Diagram/Architecture_Diagram.png), [`Architecture_Diagram.drawio`](./2-Architectural_Diagram/Architecture_Diagram.drawio), and [`Architecture_Specification.pdf`](./2-Architectural_Diagram/Architecture_Specification.pdf).
+### 2. Architectural Diagram & Component Modelling (`2-Architectural_Diagram`) — *Lab 3 Official Handout*
+- **Assigned Scenario:** **Self-Service Coffee Kiosk System** deployed in a busy café.
+- **Core Requirements:**
+  - 3 Coffee Types: *Espresso, Americano, Latte*
+  - 2 Drink Sizes: *Small, Large*
+  - Payment: *Credit Card Only*
+  - Hardware: *Receipt Printer Hardware & Touch Screen Interface*
+  - Data: *Menu Catalog & Pricing Store*
+- **Architecture Selection Statement:**
+  > **"We chose Layered Architecture for the Self-Service Coffee Kiosk System."**
+
+#### UML Component Diagram:
+![Self-Service Coffee Kiosk System UML Component Diagram](./2-Architectural_Diagram/Architecture_Diagram.png)
+
+#### 5 Identified Components & 4 Ball-and-Socket Interfaces:
+| Component Name | Layer | UML Interfaces (Ball & Socket) | Functional Responsibility |
+| :--- | :--- | :--- | :--- |
+| **User Interface Component** | Presentation | **Requires:** `Order Interface` (Socket) | Handles touch screen interactions, displays menu, drink size selection, and status rendering. |
+| **Order Manager Component** | Business | **Provides:** `Order Interface` (Ball)<br/>**Requires:** `Payment Interface`, `Receipt Interface`, `Database Interface` (Sockets) | Central orchestrator; validates orders, computes totals, coordinates card payment and receipt printing. |
+| **Payment Service Component** | Business | **Provides:** `Payment Interface` (Ball) | EMV card terminal hardware bridge, enforces Credit Card Only rule, handles PCI-compliant tokenization. |
+| **Receipt Printer Component** | Business (HW) | **Provides:** `Receipt Interface` (Ball) | ESC/POS hardware driver interface; formats itemized slips; monitors paper and hardware health. |
+| **Database Component** | Data Layer | **Provides:** `Database Interface` (Ball) | Local SQLite store; houses menu catalog, drink size pricing tables, and transaction audit records. |
+
+#### Architectural Justification Highlights:
+- **Two Reasons:**
+  1. *Modularity & Hardware Decoupling:* Peripheral drivers (touchscreen, card terminal, printer) are isolated in dedicated components, so hardware updates never destabilize core ordering logic.
+  2. *Zero-Latency Local Execution:* Eliminates the overhead and network failure modes of distributed microservices in a single-station autonomous kiosk.
+- **Security Advantage:** Strict layer isolation confines payment processing to the `Payment Service Component`. The Touch Screen UI has zero direct access to raw cardholder memory buffers or database records (PCI-DSS compliance).
+- **Performance Benefit:** Local IPC/in-memory calls (<10ms) and startup pre-caching of menu items ensure lightning-fast customer throughput during morning café rush hours.
+- **Deliverables in Folder:**
+  - [`Architecture_Justification_Document.docx`](./2-Architectural_Diagram/Architecture_Justification_Document.docx) (Official 1-page Word Document)
+  - [`Architecture_Justification_Document.pdf`](./2-Architectural_Diagram/Architecture_Justification_Document.pdf) (Printable 1-page PDF Justification)
+  - [`Architecture_Diagram.png`](./2-Architectural_Diagram/Architecture_Diagram.png) (High-Resolution Diagram Image)
+  - [`Architecture_Diagram.pdf`](./2-Architectural_Diagram/Architecture_Diagram.pdf) (Vector Diagram PDF)
+  - [`Architecture_Diagram.drawio`](./2-Architectural_Diagram/Architecture_Diagram.drawio) (Editable Draw.io XML)
+  - [`Architecture_Specification.md`](./2-Architectural_Diagram/Architecture_Specification.md) (Complete Markdown Specification)
+  - [`Architecture_Specification.pdf`](./2-Architectural_Diagram/Architecture_Specification.pdf) (Compiled Specification PDF)
 
 ### 3. Project Creation Evidence (`3-Project_Creational_Screenshots`)
 - **GitHub Setup:** Screenshots of repo creation, branch structure, and semantic commit history.
